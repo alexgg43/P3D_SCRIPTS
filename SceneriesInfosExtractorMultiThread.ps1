@@ -88,9 +88,9 @@ $ImcrementSharedVariable = {
             return
         }
         $folder = New-Item -ItemType Directory -Path $sceneryTemp
-        $xmls = $sceneryTemp.Replace(" ","`` ").Replace("(","``(").Replace(")","``)").Replace("[","``[").Replace("]","``]").Replace(",","``,")
+        $xmls = $sceneryTemp.Replace(" ","`` ").Replace("(","``(").Replace(")","``)").Replace("[","``[").Replace("]","``]").Replace(",","``,").Replace("'","``'")
         
-        $bglsForDocker = $bgls.Replace(" ","`` ").Replace("(","``(").Replace(")","``)").Replace("[","``[").Replace("]","``]").Replace(",","``,")
+        $bglsForDocker = $bgls.Replace(" ","`` ").Replace("(","``(").Replace(")","``)").Replace("[","``[").Replace("]","``]").Replace(",","``,").Replace("'","``'")
 
         Invoke-Expression "docker run --isolation=process --rm -v $($bglToXmlPath):C:\Bgl2Xml -v $($bglsForDocker):C:\bgls -v $($xmls):C:\xmls -v D:\Documents\Sources\P3D_Scripts\Contrainershit:c:\scripts mcr.microsoft.com/windows/servercore:1909 powershell.exe c:\scripts\BGLToXMLContainerEdition.ps1"
 
@@ -101,7 +101,7 @@ $ImcrementSharedVariable = {
             try {
                 [xml]$xml = ($xmlFile | Get-Content)
             
-                if($null -ne $xml.FSData.Airport)
+                if(($null -ne $xml.FSData.Airport) -and ($null -ne $xml.FSData.Airport.Runway))
                 {
                     #$xml.FSData.Airport.Runway
                     $TotalRunwaySurface = 0
@@ -139,7 +139,7 @@ $ImcrementSharedVariable = {
                 }       
             }
             catch {
-                Write-Host $PSItem.Exception.Message -ForegroundColor Red
+                Write-Host "Exception with file: $($xmlFile.fullname) --> $($PSItem.Exception.Message)" -ForegroundColor Red
             }
         }
 
@@ -155,7 +155,7 @@ if (!(Test-Path -Path $tempRep)){New-Item -ItemType Directory -Path $tempRep}
 Get-ChildItem -Path $tempRep | Remove-Item -Force -Confirm:$false -Recurse
 
 $dataAirport = [hashtable]::Synchronized(@{})
-$Throttle = 25
+$Throttle = 15
 
 $pathP3DSceneryDefault = "G:\Prepar3D v4\Scenery"
 $excludeListPath = "ExclusionsRegex.csv"
@@ -182,8 +182,6 @@ foreach ($hash in $sceneryJson.GetEnumerator())
         }
     }
 }
-
-#$filteredScenery = $filteredScenery | Sort-Object {Get-Random}
 
 cls
 
