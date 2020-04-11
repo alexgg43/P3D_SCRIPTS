@@ -38,9 +38,17 @@ function GetAirportSize
         {
             $size = "Medium"
         } 
-        else
+        elseif($RunwayMaximumLength -ge 250)
         {
             $size = "Small"
+        }
+        elseif($RunwayMaximumLength -ge 100)
+        {
+            $size = "Very Small"
+        }
+        else
+        {
+            $size = "Special"
         }
 
         return $size
@@ -92,7 +100,7 @@ $ImcrementSharedVariable = {
         
         $bglsForDocker = $bgls.Replace(" ","`` ").Replace("(","``(").Replace(")","``)").Replace("[","``[").Replace("]","``]").Replace(",","``,").Replace("'","``'")
 
-        Invoke-Expression "docker run --isolation=process --rm -v $($bglToXmlPath):C:\Bgl2Xml -v $($bglsForDocker):C:\bgls -v $($xmls):C:\xmls -v D:\Documents\Sources\P3D_Scripts\Contrainershit:c:\scripts mcr.microsoft.com/windows/servercore:1909 powershell.exe c:\scripts\BGLToXMLContainerEdition.ps1"
+        Invoke-Expression "docker run --isolation=process --rm -v $($bglToXmlPath):C:\Bgl2Xml -v $($bglsForDocker):C:\bgls -v $($xmls):C:\xmls -v C:\Users\Kevin\Desktop\devp3d\P3D_SCRIPTS\Contrainershit:c:\scripts mcr.microsoft.com/windows/servercore:1909 powershell.exe c:\scripts\BGLToXMLContainerEdition.ps1"
 
         $xmlFiles = @($folder | Get-ChildItem)
 
@@ -182,13 +190,13 @@ $dataAirport = [hashtable]::Synchronized(@{})
 $Throttle = 15
 
 #Path to the P3D default sceneries
-$pathP3DSceneryDefault = "G:\Prepar3D v4\Scenery"
+$pathP3DSceneryDefault = "F:\Prepar3D v4\Scenery"
 
 #Regex to set the Scenery name to exclude
 $excludeListPath = "ExclusionsRegex.csv"
 
 #Path where the software Gbl2Xml is located
-$bglToXmlPath = "H:\Tools\Bgl2Xml186\"
+$bglToXmlPath = "C:\Users\Kevin\Desktop\dev\Bgl2Xml186\"
 
 #Load and merge all exclusions regexs
 $excludeRegex = $(Get-Content $excludeListPath) -Join "|"
@@ -212,7 +220,7 @@ foreach ($hash in $sceneryJson.GetEnumerator())
     {
         $filteredScenery.Add($hash.value) | Out-Null
         $i++
-        if($i -ge 10000){
+        if($i -ge 100000){
             break
         }
     }
@@ -244,7 +252,7 @@ $jsonfile | Set-Content -Path "$($tempRep)\airports.json" -Encoding unicode
 ###################################################
 ########### KML export by airport size ############
 ###################################################
-$kmlTemplate = ".\Map\template.kml" 
+$kmlTemplate = "$PSScriptRoot\Map\template.kml" 
 
 $kmlGroups = $dataAirport.Values | Group-Object -Property AirportSize
 
