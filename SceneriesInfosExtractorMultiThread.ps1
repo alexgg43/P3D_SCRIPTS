@@ -146,28 +146,63 @@ $ImcrementSharedVariable = {
         $folder | Remove-Item -Force -Confirm:$false -Recurse
     }
 }
+###################################################################
+############## SceneriesInfoExtractorMultithread.ps1 ##############
+### Extract data for your addons aiports in your P3D sceneries ###
+###################################################################
 
+cls
 
+#########################
+### Libraries Imports ###
+#########################
 Get-Module SplitPipeline
 
-$tempRep = "$PSScriptRoot\Temp"
-if (!(Test-Path -Path $tempRep)){New-Item -ItemType Directory -Path $tempRep} 
-Get-ChildItem -Path $tempRep | Remove-Item -Force -Confirm:$false -Recurse
+#########################
+## Temp working folder ##
+#########################
 
+$tempRep = "$PSScriptRoot\Temp"
+if (!(Test-Path -Path $tempRep))
+{
+    New-Item -ItemType Directory -Path $tempRep
+}
+else {
+    Get-ChildItem -Path $tempRep | Remove-Item -Force -Confirm:$false -Recurse
+} 
+
+############################
+### Script Configuration ###
+############################
+
+#Contain all datas extracted from bgls
 $dataAirport = [hashtable]::Synchronized(@{})
+
+#Limit the number of thread
 $Throttle = 15
 
+#Path to the P3D default sceneries
 $pathP3DSceneryDefault = "G:\Prepar3D v4\Scenery"
+
+#Regex to set the Scenery name to exclude
 $excludeListPath = "ExclusionsRegex.csv"
+
+#Path where the software Gbl2Xml is located
 $bglToXmlPath = "H:\Tools\Bgl2Xml186\"
 
+#Load and merge all exclusions regexs
 $excludeRegex = $(Get-Content $excludeListPath) -Join "|"
 
+#Path of the json export of your Prepar3d Sceneries, the content of this file must match the real content of your P3D
 $fileJSon = "$PSScriptRoot\scenery.cfg.json"
 
 $sceneryJson = (Get-Content $fileJSon | ConvertFrom-Json -AsHashtable)
 
-#Move this to array as it is only acceced through a loop
+#TODO sceneryJson : Move this to array as it is only acceced through a loop
+
+###################################################
+### Data filtering to remove unwanted sceneries ###
+###################################################
 
 $i = 0
 $filteredScenery = [System.Collections.ArrayList]@()
@@ -183,19 +218,32 @@ foreach ($hash in $sceneryJson.GetEnumerator())
     }
 }
 
-cls
+#For Debug
+#$filteredScenery = $filteredScenery | Sort-Object {Get-Random}
 
+###################################################
+########## Multithreaded data extraction ##########
+###################################################
 $filteredScenery | Split-Pipeline -Script $ImcrementSharedVariable  -Variable dataAirport,tempRep,bglToXmlPath -Function GetRunwayAreaValue, DistanceToMeter, GetAirportSize -Count $Throttle
 
+###################################################
+########### Extracted data statistics #############
+###################################################
 Write-Host "!!--BGL STATS--!!"
 $dataAirport.Values.Bgl_Size | measure -AllStats
 Write-Host "!!--XML STATS--!!"
 $dataAirport.Values.XML_Size | measure -AllStats
 
+###################################################
+############## Export data to Json ################
+###################################################
 $jsonfile = ConvertTo-Json -InputObject $dataAirport
 
 $jsonfile | Set-Content -Path "$($tempRep)\airports.json" -Encoding unicode
 
+###################################################
+########### KML export by airport size ############
+###################################################
 $kmlTemplate = ".\Map\template.kml" 
 
 $kmlGroups = $dataAirport.Values | Group-Object -Property AirportSize
