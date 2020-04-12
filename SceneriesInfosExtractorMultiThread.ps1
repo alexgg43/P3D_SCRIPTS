@@ -38,7 +38,7 @@ function GetAirportSize
         {
             $size = "Medium"
         } 
-        elseif($RunwayMaximumLength -ge 250)
+        elseif($RunwayMaximumLength -ge 1000)
         {
             $size = "Small"
         }
@@ -83,12 +83,68 @@ function DistanceToMeter  #Param "1234.45FT" or "1234.14M"
     return $floatDistance
 }
 
+function GetOppositeRunway 
+{
+    param(
+        [string]$number,
+        [string]$designator
+    )
+    
+
+    if($designator -like "LEFT")
+    {
+        $oppositeDesignator = "RIGHT"
+    }
+    elseif($designator -like "RIGHT")
+    {
+        $oppositeDesignator = "LEFT"
+    }
+    elseif($designator -like "CENTER")
+    {
+        $oppositeDesignator = "CENTER"
+    }
+    else {
+        $oppositeDesignator = "NONE"
+    }
+
+    try {
+        [int]$number = [convert]::ToInt32($number, 10)
+
+        $oppositeNumber = ($number + 18 )%36
+        if($oppositeNumber -eq 0)
+        {
+                $oppositeNumber = 36
+        }
+
+        $oppositeRunway = @{
+            "Number" = [string]("{0:d2}" -f [int]$oppositeNumber)
+            "Designator" = $oppositeDesignator
+        } 
+        return $oppositeRunway
+    }
+    catch {
+        $oppositeNumber = $number
+
+        $oppositeRunway = @{
+            "Number" = $oppositeNumber
+            "Designator" = $oppositeDesignator
+        } 
+        return $oppositeRunway
+    }
+
+
+
+
+}
+
 $ImcrementSharedVariable = {
 
     process {
         Write-Host "Traitement de: $($_.Local)"
         $repScenTmp = $($_.Local).Replace("\","_").replace(":","_")
         $sceneryTemp = "$tempRep\$repScenTmp"
+
+        $arrayCountryGroupsScenery = @()
 
         $bgls = "$($_.Local)\scenery"
         if(!(Test-Path $bgls.Replace("[","``[").Replace("]","``]"))){
@@ -100,7 +156,7 @@ $ImcrementSharedVariable = {
         
         $bglsForDocker = $bgls.Replace(" ","`` ").Replace("(","``(").Replace(")","``)").Replace("[","``[").Replace("]","``]").Replace(",","``,").Replace("'","``'")
 
-        Invoke-Expression "docker run --isolation=process --rm -v $($bglToXmlPath):C:\Bgl2Xml -v $($bglsForDocker):C:\bgls -v $($xmls):C:\xmls -v C:\Users\Kevin\Desktop\devp3d\P3D_SCRIPTS\Contrainershit:c:\scripts mcr.microsoft.com/windows/servercore:1909 powershell.exe c:\scripts\BGLToXMLContainerEdition.ps1"
+        Invoke-Expression "docker run --isolation=process --rm -v $($bglToXmlPath):C:\Bgl2Xml -v $($bglsForDocker):C:\bgls -v $($xmls):C:\xmls -v $currentRep\Contrainershit:c:\scripts mcr.microsoft.com/windows/servercore:1909 powershell.exe c:\scripts\BGLToXMLContainerEdition.ps1"
 
         $xmlFiles = @($folder | Get-ChildItem)
 
@@ -111,45 +167,76 @@ $ImcrementSharedVariable = {
             
                 if(($null -ne $xml.FSData.Airport) -and ($null -ne $xml.FSData.Airport.Runway))
                 {
-                    #$xml.FSData.Airport.Runway
-                    $TotalRunwaySurface = 0
-                    $MaxRunwayLength = 0
-
-                    foreach($runway in $xml.FSData.Airport.Runway)
+                    if(!($($xml.FSData.Airport.name) -like "*ignore*" -or $($xml.FSData.Airport.city) -like "*ignore*"))
                     {
-                        $TotalRunwaySurface += GetRunwayAreaValue $runway.length $runway.width
-                        $currentRunwayLength = DistanceToMeter $runway.length
-                        if($currentRunwayLength -gt $MaxRunwayLength)
+                        #$xml.FSData.Airport.Runway
+                        $TotalRunwaySurface = 0
+                        $MaxRunwayLength = 0
+                        $arrayRunway = @()
+
+                        foreach($runway in $xml.FSData.Airport.Runway)
                         {
-                            $MaxRunwayLength = $currentRunwayLength
+                            $TotalRunwaySurface += GetRunwayAreaValue $runway.length $runway.width
+                            $currentRunwayLength = DistanceToMeter $runway.length
+                            if($currentRunwayLength -gt $MaxRunwayLength)
+                            {
+                                $MaxRunwayLength = $currentRunwayLength
+                            }
+
+                            $oppositeRunway = GetOppositeRunway $($runway.number) $($runway.designator)
+
+                            $runway =  @{
+                                "Number" = $runway.number
+                                "Designator" = $runway.designator
+                                "NumberOpposite" = $oppositeRunway.Number
+                                "DesignatorOpposite" = $oppositeRunway.Designator
+                                "Length" = DistanceToMeter $runway.length
+                                "Width" = DistanceToMeter $runway.width
+                                "Surface" = $runway.surface
+                            } 
+
+                            $arrayRunway += $runway
+                        }
+                        $airportSize = GetAirportSize $TotalRunwaySurface $MaxRunwayLength
+
+                        $airport = @{
+                            "OACI" = $($xml.FSData.Airport.ident);
+                            "Country" = $($xml.FSData.Airport.country);
+                            "City" = $($xml.FSData.Airport.city);
+                            "Latitude" = [double]$($xml.FSData.Airport.lat);
+                            "Longitude" = [double]$($xml.FSData.Airport.lon);
+                            "Altitude" = DistanceToMeter $($xml.FSData.Airport.alt);
+                            "Name" = $($xml.FSData.Airport.name);
+                            "State" = $($xml.FSData.Airport.state);
+                            "Bgl_Size" = ((Get-Item -Path "$($bgls.Replace("[","``[").Replace("]","``]"))\$($xmlFile.basename).bgl").Length)/1KB;
+                            "XML_Size" = ($xmlFile.Length)/1KB;
+                            "RunwayArea" = $TotalRunwaySurface;
+                            "AirportSize" = $airportSize
+                            "RunwayList" = $arrayRunway
+                            "BGLPath" = $xmlFile.FullName
+                        }
+                        $dataAirport.Add($xml.FSData.Airport.ident , $airport)
+
+                        if($arrayCountryGroupsScenery -notcontains $($xml.FSData.Airport.country))
+                        {
+                            $arrayCountryGroupsScenery += $($xml.FSData.Airport.country)
                         }
                     }
-                    $airportSize = GetAirportSize $TotalRunwaySurface $MaxRunwayLength
-
-                    $airport = @{
-                        "OACI" = $($xml.FSData.Airport.ident);
-                        "Country" = $($xml.FSData.Airport.country);
-                        "City" = $($xml.FSData.Airport.city);
-                        "Latitude" = [double]$($xml.FSData.Airport.lat);
-                        "Longitude" = [double]$($xml.FSData.Airport.lon);
-                        "Altitude" = $($xml.FSData.Airport.alt);
-                        "Name" = $($xml.FSData.Airport.name);
-                        "State" = $($xml.FSData.Airport.state);
-                        "Bgl_Size" = ((Get-Item -Path "$($bgls.Replace("[","``[").Replace("]","``]"))\$($xmlFile.basename).bgl").Length)/1KB;
-                        "XML_Size" = ($xmlFile.Length)/1KB;
-                        "RunwayArea" = $TotalRunwaySurface;
-                        "AirportSize" = $airportSize
+                    else {
+                        Write-Host "Exception with file: $($xmlFile.fullname) - File to ignore" -ForegroundColor Yellow
+                        Remove-Item "$($xmlFile.fullname)" -Force -Confirm:$false
                     }
-                    $dataAirport.Add($xml.FSData.Airport.ident , $airport)
                 }
                 else {
                     Remove-Item "$($xmlFile.fullname)" -Force -Confirm:$false
-                }       
+                }      
             }
             catch {
                 Write-Host "Exception with file: $($xmlFile.fullname) --> $($PSItem.Exception.Message)" -ForegroundColor Red
             }
         }
+
+        $dataCountryGroups.Add($_.Layer,$arrayCountryGroupsScenery)
 
         $folder | Remove-Item -Force -Confirm:$false -Recurse
     }
@@ -183,8 +270,14 @@ else {
 ### Script Configuration ###
 ############################
 
+#CurrentRep
+$currentRep = $PSScriptRoot
+
 #Contain all datas extracted from bgls
 $dataAirport = [hashtable]::Synchronized(@{})
+
+#Contain all country groups for areas
+$dataCountryGroups = [hashtable]::Synchronized(@{})
 
 #Limit the number of thread
 $Throttle = 15
@@ -220,7 +313,7 @@ foreach ($hash in $sceneryJson.GetEnumerator())
     {
         $filteredScenery.Add($hash.value) | Out-Null
         $i++
-        if($i -ge 100000){
+        if($i -ge 5){
             break
         }
     }
@@ -232,7 +325,7 @@ foreach ($hash in $sceneryJson.GetEnumerator())
 ###################################################
 ########## Multithreaded data extraction ##########
 ###################################################
-$filteredScenery | Split-Pipeline -Script $ImcrementSharedVariable  -Variable dataAirport,tempRep,bglToXmlPath -Function GetRunwayAreaValue, DistanceToMeter, GetAirportSize -Count $Throttle
+$filteredScenery | Split-Pipeline -Script $ImcrementSharedVariable  -Variable dataAirport,dataCountryGroups,tempRep,bglToXmlPath, currentRep -Function GetRunwayAreaValue, DistanceToMeter, GetAirportSize, GetOppositeRunway -Count $Throttle
 
 ###################################################
 ########### Extracted data statistics #############
@@ -242,10 +335,10 @@ $dataAirport.Values.Bgl_Size | measure -AllStats
 Write-Host "!!--XML STATS--!!"
 $dataAirport.Values.XML_Size | measure -AllStats
 
-###################################################
-############## Export data to Json ################
-###################################################
-$jsonfile = ConvertTo-Json -InputObject $dataAirport
+###########################################################
+############## Export airport data to Json ################
+###########################################################
+$jsonfile = ConvertTo-Json -InputObject $dataAirport -Depth 5
 
 $jsonfile | Set-Content -Path "$($tempRep)\airports.json" -Encoding unicode
 
@@ -265,9 +358,20 @@ foreach($group in $kmlGroups)
 
     foreach($airpot in $group.Group)
     {
+        #Write-Host $($airpot | Select -Property *)
+        $arrayRunwayStr = ""
+        foreach($runway in $airpot.RunwayList)
+        {
+            if($runway.length -ge 100)
+            {
+                $arrayRunwayStr = $arrayRunwayStr+"$($runway.Number)$($($runway.Designator).substring(0,1).replace('N',''))/$($runway.NumberOpposite)$($($runway.DesignatorOpposite).substring(0,1).replace('N','')) - $([math]::round(($runway.length/10))*10) m - $($runway.surface)`n"
+            }
+        }
+
+        $namexml = [System.Security.SecurityElement]::Escape("$($airpot.OACI) - $($airpot.city) - $($airpot.name)")
         [xml]$kmlPlacemark = "<Placemark>
-                <name>$($airpot.OACI) - $($airpot.city) - $($airpot.name)</name>
-                <description></description>
+                <name>$namexml</name>
+                <description>$arrayRunwayStr</description>
                 <Point>
                 <coordinates>$($airpot.Longitude -replace ",","."),$($airpot.Latitude -replace ",",".")</coordinates>
                 </Point>
@@ -277,4 +381,26 @@ foreach($group in $kmlGroups)
 
     $kml.Save("$($tempRep)\$($group.Name)_Airports.kml")
 }
+
+
+##########################################################################
+############## Export scenery.cfg.json with country groups ###############
+##########################################################################
+$sceneryJsonCountryGroups = $sceneryJson
+
+foreach($area in $dataCountryGroups.Keys)
+{
+    foreach($country in $dataCountryGroups[$area])
+    {
+        if($sceneryJsonCountryGroups["Area.$area"].Groups -notcontains $country)
+        {
+            $sceneryJsonCountryGroups["Area.$area"].Groups += $country
+        }
+    }
+}
+
+$jsonfileCountryGroups = ConvertTo-Json -InputObject $sceneryJsonCountryGroups -Depth 8
+
+$jsonfileCountryGroups | Set-Content -Path "$($tempRep)\sceneryCountryGroups.cfg.json" -Encoding unicode
+
 

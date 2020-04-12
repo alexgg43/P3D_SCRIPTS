@@ -3,7 +3,7 @@ $xmls = "c:\xmls"
 
 $bglToXmlPath = "C:\Bgl2Xml\Bgl2Xml.exe"
 
-$bglScenery = (Get-ChildItem $bgls -Filter "*.bgl"<#  | where-object {$_.length -gt 1KB} #>)
+$bglScenery = (Get-ChildItem $bgls -Filter "*.bgl" | where-object {$_.length/1KB -lt 100000}) # Limite la taille des bgl traités à 100000 KO
 
 for ($i = 0; $i -lt $bglScenery.Count; $i++) {
     try {

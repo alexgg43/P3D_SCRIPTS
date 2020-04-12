@@ -2,3 +2,12 @@ scenery.cfg.json
 Temp/*
 930/*
 .vscode/
+bck/*
+
+ExclusionsRegex.csv.xx
+
+scenery.cfg
+
+sceneryCountryGroups.cfg
+
+sceneryCountryGroups.cfg.json
