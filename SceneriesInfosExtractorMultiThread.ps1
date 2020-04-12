@@ -368,7 +368,7 @@ foreach($group in $kmlGroups)
             }
         }
 
-        $namexml = [System.Security.SecurityElement]::Escape("$($airpot.OACI) - $($airpot.city) - $($airpot.name)")
+        $namexml = [System.Security.SecurityElement]::Escape("$($airpot.OACI) - $($airpot.city) - $($airpot.name) - $([math]::round(($airpot.Altitude/10))*10) m")
         [xml]$kmlPlacemark = "<Placemark>
                 <name>$namexml</name>
                 <description>$arrayRunwayStr</description>
