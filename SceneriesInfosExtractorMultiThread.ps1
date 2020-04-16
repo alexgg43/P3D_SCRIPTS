@@ -131,10 +131,39 @@ function GetOppositeRunway
         } 
         return $oppositeRunway
     }
+}
 
-
-
-
+function isSameAirport
+{
+    param(
+        $airport1,
+        $airport2
+    )
+    if($airport1.OACI -ne $airport2.OACI)
+    {
+        return $false
+    }
+    if($airport1.Country -ne $airport2.Country)
+    {
+        return $false
+    }
+    if($airport1.City -ne $airport2.City)
+    {
+        return $false
+    }
+    if($airport1.State -ne $airport2.State)
+    {
+        return $false
+    }
+    if([Math]::Abs($($airport1.Latitude) - $($airport2.Latitude)) -gt 0.1)
+    {
+        return $false
+    }
+    if([Math]::Abs($($airport1.Longitude) - $($airport2.Longitude)) -gt 0.1)
+    {
+        return $false
+    }
+    return $true
 }
 
 $ImcrementSharedVariable = {
@@ -213,10 +242,24 @@ $ImcrementSharedVariable = {
                             "RunwayArea" = $TotalRunwaySurface;
                             "AirportSize" = $airportSize
                             "RunwayList" = $arrayRunway
-                            "BGLPath" = $xmlFile.FullName
+                            "BGLPath" = (Get-Item -Path "$($bgls.Replace("[","``[").Replace("]","``]"))\$($xmlFile.basename).bgl").FullName
                         }
-                        $dataAirport.Add($xml.FSData.Airport.ident , $airport)
-
+                        
+                        if($dataAirport.ContainsKey($xml.FSData.Airport.ident))
+                        {
+                            if($(isSameAirport $airport $($dataAirport[$xml.FSData.Airport.ident])) -eq $true)
+                            {
+                                Write-Host "Exception with file: $($xmlFile.fullname) --> $($xml.FSData.Airport.ident) is same airport" -ForegroundColor Yellow
+                            }
+                            else {
+                                Write-Host "Exception with file: $($xmlFile.fullname) --> $($xml.FSData.Airport.ident) Fake same airport " -ForegroundColor Red
+                            }
+                        }
+                        else {
+                            $dataAirport.Add($xml.FSData.Airport.ident , $airport)
+                        }
+                        
+                        
                         if($arrayCountryGroupsScenery -notcontains $($xml.FSData.Airport.country))
                         {
                             $arrayCountryGroupsScenery += $($xml.FSData.Airport.country)
@@ -313,7 +356,7 @@ foreach ($hash in $sceneryJson.GetEnumerator())
     {
         $filteredScenery.Add($hash.value) | Out-Null
         $i++
-        if($i -ge 5){
+        if($i -ge 1000){
             break
         }
     }
@@ -325,7 +368,7 @@ foreach ($hash in $sceneryJson.GetEnumerator())
 ###################################################
 ########## Multithreaded data extraction ##########
 ###################################################
-$filteredScenery | Split-Pipeline -Script $ImcrementSharedVariable  -Variable dataAirport,dataCountryGroups,tempRep,bglToXmlPath, currentRep -Function GetRunwayAreaValue, DistanceToMeter, GetAirportSize, GetOppositeRunway -Count $Throttle
+$filteredScenery | Split-Pipeline -Script $ImcrementSharedVariable  -Variable dataAirport,dataCountryGroups,tempRep,bglToXmlPath, currentRep -Function GetRunwayAreaValue, DistanceToMeter, GetAirportSize, GetOppositeRunway, isSameAirport -Count $Throttle
 
 ###################################################
 ########### Extracted data statistics #############
@@ -402,5 +445,4 @@ foreach($area in $dataCountryGroups.Keys)
 $jsonfileCountryGroups = ConvertTo-Json -InputObject $sceneryJsonCountryGroups -Depth 8
 
 $jsonfileCountryGroups | Set-Content -Path "$($tempRep)\sceneryCountryGroups.cfg.json" -Encoding unicode
-
 

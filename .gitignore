@@ -11,3 +11,5 @@ scenery.cfg
 sceneryCountryGroups.cfg
 
 sceneryCountryGroups.cfg.json
+
+ExclusionsRegex.csv.xxx
